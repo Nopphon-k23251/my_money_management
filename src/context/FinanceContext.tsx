@@ -40,14 +40,34 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [transactions, setTransactions] = useState<Transaction[]>(() => storageService.loadTransactions());
   const [budgets, setBudgets] = useState<Budget[]>(() => storageService.loadBudgets());
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const isCloudUpdateRef = useRef(false);
+
+  const healthScore = evaluateFinancialHealth(assets, transactions);
+  const netWorthData = calculateNetWorth(assets);
+
+  // Helper to persist locally and sync to Cloud immediately
+  const persistAndSync = (
+    newAssets: Asset[],
+    newTx: Transaction[],
+    newBudgets: Budget[]
+  ) => {
+    storageService.saveAssets(newAssets);
+    storageService.saveTransactions(newTx);
+    storageService.saveBudgets(newBudgets);
+
+    if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
+      storageService.syncToCloud(user.id, {
+        assets: newAssets,
+        transactions: newTx,
+        budgets: newBudgets,
+      });
+    }
+  };
 
   // Subscribe to Cloud Firestore when a user is logged in
   useEffect(() => {
     if (!user || user.isDemoUser) {
-      setIsInitialized(true);
       return;
     }
 
@@ -61,6 +81,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setAssets(cloudData.assets || []);
         setTransactions(cloudData.transactions || []);
         setBudgets(cloudData.budgets || []);
+        storageService.saveAssets(cloudData.assets || []);
+        storageService.saveTransactions(cloudData.transactions || []);
+        storageService.saveBudgets(cloudData.budgets || []);
       } else {
         // Cloud is empty -> migrate current local data to cloud
         const currentLocalAssets = storageService.loadAssets();
@@ -74,39 +97,31 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           });
         }
       }
-      setIsInitialized(true);
       setIsSyncing(false);
     });
 
     // Realtime Listener across devices
     const unsubscribe = storageService.subscribeToCloud(user.id, (cloudData) => {
       isCloudUpdateRef.current = true;
-      if (cloudData.assets) setAssets(cloudData.assets);
-      if (cloudData.transactions) setTransactions(cloudData.transactions);
-      if (cloudData.budgets) setBudgets(cloudData.budgets);
+      if (cloudData.assets) {
+        setAssets(cloudData.assets);
+        storageService.saveAssets(cloudData.assets);
+      }
+      if (cloudData.transactions) {
+        setTransactions(cloudData.transactions);
+        storageService.saveTransactions(cloudData.transactions);
+      }
+      if (cloudData.budgets) {
+        setBudgets(cloudData.budgets);
+        storageService.saveBudgets(cloudData.budgets);
+      }
       setTimeout(() => {
         isCloudUpdateRef.current = false;
-      }, 100);
+      }, 150);
     });
 
     return () => unsubscribe();
   }, [user?.id]);
-
-  // Persist locally & Sync to Cloud only after initialization and when user makes local changes
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    storageService.saveAssets(assets);
-    storageService.saveTransactions(transactions);
-    storageService.saveBudgets(budgets);
-
-    if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
-      storageService.syncToCloud(user.id, { assets, transactions, budgets });
-    }
-  }, [assets, transactions, budgets, isInitialized, user?.id]);
-
-  const healthScore = evaluateFinancialHealth(assets, transactions);
-  const netWorthData = calculateNetWorth(assets);
 
   // Asset Handlers
   const addAsset = (assetData: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -120,29 +135,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setAssets((prev) => [newAsset, ...prev]);
+    const nextAssets = [newAsset, ...assets];
+    setAssets(nextAssets);
+    persistAndSync(nextAssets, transactions, budgets);
   };
 
   const updateAsset = (id: string, data: Partial<Asset>) => {
-    setAssets((prev) =>
-      prev.map((a) =>
-        a.id === id
-          ? {
-              ...a,
-              ...data,
-              name: data.name ? sanitizeInput(data.name) : a.name,
-              bankName: data.bankName ? sanitizeInput(data.bankName) : a.bankName,
-              accountNumber: data.accountNumber ? sanitizeInput(data.accountNumber) : a.accountNumber,
-              notes: data.notes ? sanitizeInput(data.notes) : a.notes,
-              updatedAt: new Date().toISOString(),
-            }
-          : a
-      )
+    const nextAssets = assets.map((a) =>
+      a.id === id
+        ? {
+            ...a,
+            ...data,
+            name: data.name ? sanitizeInput(data.name) : a.name,
+            bankName: data.bankName ? sanitizeInput(data.bankName) : a.bankName,
+            accountNumber: data.accountNumber ? sanitizeInput(data.accountNumber) : a.accountNumber,
+            notes: data.notes ? sanitizeInput(data.notes) : a.notes,
+            updatedAt: new Date().toISOString(),
+          }
+        : a
     );
+    setAssets(nextAssets);
+    persistAndSync(nextAssets, transactions, budgets);
   };
 
   const deleteAsset = (id: string) => {
-    setAssets((prev) => prev.filter((a) => a.id !== id));
+    const nextAssets = assets.filter((a) => a.id !== id);
+    setAssets(nextAssets);
+    persistAndSync(nextAssets, transactions, budgets);
   };
 
   // Transaction Handlers (with auto-balance sync)
@@ -156,63 +175,64 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     // Update asset balances accordingly
-    setAssets((prev) =>
-      prev.map((asset) => {
-        let newBalance = asset.balance;
-        if (newTx.type === 'income' && newTx.toAssetId === asset.id) {
-          newBalance += newTx.amount;
-        } else if (newTx.type === 'expense' && newTx.fromAssetId === asset.id) {
-          newBalance -= newTx.amount;
-        } else if (newTx.type === 'transfer') {
-          if (newTx.fromAssetId === asset.id) newBalance -= newTx.amount;
-          if (newTx.toAssetId === asset.id) newBalance += newTx.amount;
-        }
-        return { ...asset, balance: newBalance, updatedAt: new Date().toISOString() };
-      })
-    );
+    const nextAssets = assets.map((asset) => {
+      let newBalance = asset.balance;
+      if (newTx.type === 'income' && newTx.toAssetId === asset.id) {
+        newBalance += newTx.amount;
+      } else if (newTx.type === 'expense' && newTx.fromAssetId === asset.id) {
+        newBalance -= newTx.amount;
+      } else if (newTx.type === 'transfer') {
+        if (newTx.fromAssetId === asset.id) newBalance -= newTx.amount;
+        if (newTx.toAssetId === asset.id) newBalance += newTx.amount;
+      }
+      return { ...asset, balance: newBalance, updatedAt: new Date().toISOString() };
+    });
 
-    setTransactions((prev) => [newTx, ...prev]);
+    const nextTx = [newTx, ...transactions];
+    setAssets(nextAssets);
+    setTransactions(nextTx);
+    persistAndSync(nextAssets, nextTx, budgets);
   };
 
   const updateTransaction = (id: string, data: Partial<Transaction>) => {
     const oldTx = transactions.find((t) => t.id === id);
     if (!oldTx) return;
 
-    // Revert old transaction impact
-    setAssets((prev) =>
-      prev.map((asset) => {
-        let bal = asset.balance;
-        if (oldTx.type === 'income' && oldTx.toAssetId === asset.id) bal -= oldTx.amount;
-        if (oldTx.type === 'expense' && oldTx.fromAssetId === asset.id) bal += oldTx.amount;
-        if (oldTx.type === 'transfer') {
-          if (oldTx.fromAssetId === asset.id) bal += oldTx.amount;
-          if (oldTx.toAssetId === asset.id) bal -= oldTx.amount;
-        }
+    // Revert old transaction impact and apply new
+    const nextAssets = assets.map((asset) => {
+      let bal = asset.balance;
+      if (oldTx.type === 'income' && oldTx.toAssetId === asset.id) bal -= oldTx.amount;
+      if (oldTx.type === 'expense' && oldTx.fromAssetId === asset.id) bal += oldTx.amount;
+      if (oldTx.type === 'transfer') {
+        if (oldTx.fromAssetId === asset.id) bal += oldTx.amount;
+        if (oldTx.toAssetId === asset.id) bal -= oldTx.amount;
+      }
 
-        const merged: Transaction = { ...oldTx, ...data };
-        if (merged.type === 'income' && merged.toAssetId === asset.id) bal += merged.amount;
-        if (merged.type === 'expense' && merged.fromAssetId === asset.id) bal -= merged.amount;
-        if (merged.type === 'transfer') {
-          if (merged.fromAssetId === asset.id) bal -= merged.amount;
-          if (merged.toAssetId === asset.id) bal += merged.amount;
-        }
+      const merged: Transaction = { ...oldTx, ...data };
+      if (merged.type === 'income' && merged.toAssetId === asset.id) bal += merged.amount;
+      if (merged.type === 'expense' && merged.fromAssetId === asset.id) bal -= merged.amount;
+      if (merged.type === 'transfer') {
+        if (merged.fromAssetId === asset.id) bal -= merged.amount;
+        if (merged.toAssetId === asset.id) bal += merged.amount;
+      }
 
-        return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
-      })
+      return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
+    });
+
+    const nextTx = transactions.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            ...data,
+            category: data.category ? sanitizeInput(data.category) : t.category,
+            description: data.description ? sanitizeInput(data.description) : t.description,
+          }
+        : t
     );
 
-    setTransactions((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              ...data,
-              category: data.category ? sanitizeInput(data.category) : t.category,
-              description: data.description ? sanitizeInput(data.description) : t.description,
-            }
-          : t
-      )
-    );
+    setAssets(nextAssets);
+    setTransactions(nextTx);
+    persistAndSync(nextAssets, nextTx, budgets);
   };
 
   const deleteTransaction = (id: string) => {
@@ -220,20 +240,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!tx) return;
 
     // Revert balance
-    setAssets((prev) =>
-      prev.map((asset) => {
-        let bal = asset.balance;
-        if (tx.type === 'income' && tx.toAssetId === asset.id) bal -= tx.amount;
-        if (tx.type === 'expense' && tx.fromAssetId === asset.id) bal += tx.amount;
-        if (tx.type === 'transfer') {
-          if (tx.fromAssetId === asset.id) bal += tx.amount;
-          if (tx.toAssetId === asset.id) bal -= tx.amount;
-        }
-        return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
-      })
-    );
+    const nextAssets = assets.map((asset) => {
+      let bal = asset.balance;
+      if (tx.type === 'income' && tx.toAssetId === asset.id) bal -= tx.amount;
+      if (tx.type === 'expense' && tx.fromAssetId === asset.id) bal += tx.amount;
+      if (tx.type === 'transfer') {
+        if (tx.fromAssetId === asset.id) bal += tx.amount;
+        if (tx.toAssetId === asset.id) bal -= tx.amount;
+      }
+      return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
+    });
 
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+    const nextTx = transactions.filter((t) => t.id !== id);
+    setAssets(nextAssets);
+    setTransactions(nextTx);
+    persistAndSync(nextAssets, nextTx, budgets);
   };
 
   const transferFunds = (fromAssetId: string, toAssetId: string, amount: number, note?: string) => {
@@ -251,23 +272,29 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Budget Handlers
   const addBudget = (category: string, limitAmount: number) => {
-    setBudgets((prev) => [
-      ...prev,
+    const nextBudgets: Budget[] = [
+      ...budgets,
       {
         id: 'b-' + Date.now(),
         category: sanitizeInput(category),
         limitAmount,
         period: 'monthly',
       },
-    ]);
+    ];
+    setBudgets(nextBudgets);
+    persistAndSync(assets, transactions, nextBudgets);
   };
 
   const updateBudget = (id: string, limitAmount: number) => {
-    setBudgets((prev) => prev.map((b) => (b.id === id ? { ...b, limitAmount } : b)));
+    const nextBudgets = budgets.map((b) => (b.id === id ? { ...b, limitAmount } : b));
+    setBudgets(nextBudgets);
+    persistAndSync(assets, transactions, nextBudgets);
   };
 
   const deleteBudget = (id: string) => {
-    setBudgets((prev) => prev.filter((b) => b.id !== id));
+    const nextBudgets = budgets.filter((b) => b.id !== id);
+    setBudgets(nextBudgets);
+    persistAndSync(assets, transactions, nextBudgets);
   };
 
   const resetData = () => {
