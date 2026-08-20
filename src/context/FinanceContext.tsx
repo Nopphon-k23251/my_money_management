@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { Asset, Transaction, Budget, FinancialHealthScore, ActiveTab } from '../types/finance';
-
+import { useAuth } from './AuthContext';
 import { storageService } from '../services/storageService';
 import { evaluateFinancialHealth, calculateNetWorth } from '../utils/financialAnalysis';
 import { sanitizeInput } from '../utils/security';
@@ -13,6 +13,7 @@ interface FinanceContextType {
   setActiveTab: (tab: ActiveTab) => void;
   healthScore: FinancialHealthScore;
   netWorthData: { totalAssets: number; totalDebts: number; netWorth: number };
+  isSyncing: boolean;
   // Asset actions
   addAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateAsset: (id: string, asset: Partial<Asset>) => void;
@@ -34,22 +35,72 @@ interface FinanceContextType {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [assets, setAssets] = useState<Asset[]>(() => storageService.loadAssets());
   const [transactions, setTransactions] = useState<Transaction[]>(() => storageService.loadTransactions());
   const [budgets, setBudgets] = useState<Budget[]>(() => storageService.loadBudgets());
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const isCloudUpdateRef = useRef(false);
 
+  // Subscribe to Cloud Firestore when a user is logged in
+  useEffect(() => {
+    if (!user || user.isDemoUser) return;
+
+    setIsSyncing(true);
+
+    // Initial check & auto-migration: if cloud is empty but local has data, upload local data
+    storageService.loadFromCloud(user.id).then((cloudData) => {
+      if (cloudData) {
+        isCloudUpdateRef.current = true;
+        setAssets(cloudData.assets || []);
+        setTransactions(cloudData.transactions || []);
+        setBudgets(cloudData.budgets || []);
+      } else {
+        // First-time sync: migrate existing local data to cloud
+        const currentLocal = {
+          assets: storageService.loadAssets(),
+          transactions: storageService.loadTransactions(),
+          budgets: storageService.loadBudgets(),
+        };
+        storageService.syncToCloud(user.id, currentLocal);
+      }
+      setIsSyncing(false);
+    });
+
+    // Setup Realtime multi-device subscription
+    const unsubscribe = storageService.subscribeToCloud(user.id, (cloudData) => {
+      isCloudUpdateRef.current = true;
+      if (cloudData.assets) setAssets(cloudData.assets);
+      if (cloudData.transactions) setTransactions(cloudData.transactions);
+      if (cloudData.budgets) setBudgets(cloudData.budgets);
+    });
+
+    return () => unsubscribe();
+  }, [user?.id]);
+
+  // Persist locally & Sync to Cloud when user makes changes
   useEffect(() => {
     storageService.saveAssets(assets);
-  }, [assets]);
+    if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
+      storageService.syncToCloud(user.id, { assets, transactions, budgets });
+    }
+  }, [assets, user?.id]);
 
   useEffect(() => {
     storageService.saveTransactions(transactions);
-  }, [transactions]);
+    if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
+      storageService.syncToCloud(user.id, { assets, transactions, budgets });
+    }
+  }, [transactions, user?.id]);
 
   useEffect(() => {
     storageService.saveBudgets(budgets);
-  }, [budgets]);
+    if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
+      storageService.syncToCloud(user.id, { assets, transactions, budgets });
+    }
+    isCloudUpdateRef.current = false;
+  }, [budgets, user?.id]);
 
   const healthScore = evaluateFinancialHealth(assets, transactions);
   const netWorthData = calculateNetWorth(assets);
@@ -221,6 +272,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setAssets(storageService.loadAssets());
     setTransactions(storageService.loadTransactions());
     setBudgets(storageService.loadBudgets());
+    if (user && !user.isDemoUser) {
+      storageService.syncToCloud(user.id, { assets: [], transactions: [], budgets: [] });
+    }
   };
 
   return (
@@ -233,6 +287,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setActiveTab,
         healthScore,
         netWorthData,
+        isSyncing,
         addAsset,
         updateAsset,
         deleteAsset,

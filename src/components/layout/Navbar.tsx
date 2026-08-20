@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useFinance } from '../../context/FinanceContext';
 import { AuthModal } from '../common/AuthModal';
 import {
   Wallet,
@@ -9,6 +10,8 @@ import {
   LogIn,
   Sun,
   Moon,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -18,6 +21,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onOpenAddTransaction, onOpenTransfer }) => {
   const { user, logout, updateUserCurrency, theme, toggleTheme } = useAuth();
+  const { isSyncing } = useFinance();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
@@ -32,10 +36,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAddTransaction, onOpenTran
               <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
                 <Wallet className="w-4 h-4" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex items-center gap-2">
                 <span className="font-bold text-sm sm:text-base bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-800 dark:from-white dark:via-indigo-200 dark:to-indigo-400 bg-clip-text text-transparent truncate block">
                   WealthWise Pro
                 </span>
+                {user && (
+                  <span
+                    title={isSyncing ? 'กำลังซิงค์ข้อมูลกับ Cloud...' : 'ข้อมูลซิงค์กับ Cloud แล้ว'}
+                    className="hidden md:flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60"
+                  >
+                    {isSyncing ? (
+                      <RefreshCw className="w-3 h-3 animate-spin text-emerald-500" />
+                    ) : (
+                      <Cloud className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    )}
+                    <span>{isSyncing ? 'Syncing...' : 'Cloud Synced'}</span>
+                  </span>
+                )}
               </div>
             </div>
 

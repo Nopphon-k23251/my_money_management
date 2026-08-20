@@ -13,6 +13,18 @@ export function sanitizeInput(input: string | undefined | null): string {
 }
 
 /**
+ * Sanitizes cell values to prevent CSV Formula Injection (CWE-1236)
+ */
+export function sanitizeCsvField(val: string | number | undefined | null): string {
+  if (val === undefined || val === null) return '""';
+  let str = String(val);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+/**
  * Validates monetary amounts (must be positive number, max 2 decimals, within bounds)
  */
 export function validateAmount(amount: number | string): { isValid: boolean; error?: string } {

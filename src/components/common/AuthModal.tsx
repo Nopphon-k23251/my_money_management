@@ -51,8 +51,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handleGoogleLogin = async () => {
-    await loginWithGoogle();
-    onClose();
+    setErrorMessage('');
+    try {
+      await loginWithGoogle();
+      onClose();
+    } catch (err: unknown) {
+      console.error('Google Sign In Error:', err);
+      const error = err as { code?: string; message?: string };
+      if (error.code === 'auth/popup-closed-by-user') {
+        setErrorMessage('หน้าต่างเข้าสู่ระบบถูกปิดก่อนเสร็จสิ้น');
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setErrorMessage('โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Console (กรุณาเพิ่ม Authorized Domain)');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setErrorMessage('ยังไม่ได้เปิดใช้งาน Google Sign-in ใน Firebase Console');
+      } else {
+        setErrorMessage('เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google');
+      }
+    }
   };
 
   return (

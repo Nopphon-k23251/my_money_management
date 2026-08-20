@@ -73,14 +73,25 @@ export const TransactionsView: React.FC = () => {
 
   const exportCSV = () => {
     const headers = ['ID', 'Date', 'Type', 'Category', 'Amount', 'Description', 'Tags'];
+    
+    // Prevent CSV formula injection (neutralize =, +, -, @)
+    const sanitizeCsvCell = (val: string | number | undefined | null): string => {
+      if (val === undefined || val === null) return '""';
+      let str = String(val);
+      if (/^[=+\-@\t\r]/.test(str)) {
+        str = "'" + str;
+      }
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
     const rows = filteredTransactions.map((t) => [
-      t.id,
-      t.date,
-      t.type,
-      `"${t.category}"`,
+      sanitizeCsvCell(t.id),
+      sanitizeCsvCell(t.date),
+      sanitizeCsvCell(t.type),
+      sanitizeCsvCell(t.category),
       t.amount,
-      `"${t.description || ''}"`,
-      `"${(t.tags || []).join(',')}"`,
+      sanitizeCsvCell(t.description || ''),
+      sanitizeCsvCell((t.tags || []).join(',')),
     ]);
 
     const csvContent =

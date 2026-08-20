@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   sanitizeInput,
+  sanitizeCsvField,
   validateAmount,
   validateDate,
   validatePasswordNIST,
@@ -18,10 +19,25 @@ describe('Security & Sanitization Utils', () => {
     expect(clean).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;&#x2F;script&gt;');
   });
 
+  it('should sanitize CSV cells to prevent Formula Injection (CWE-1236)', () => {
+    const malicious1 = '=1+2';
+    const malicious2 = '+cmd|"/C calc"!A0';
+    const malicious3 = '-100';
+    const malicious4 = '@SUM(A1:A10)';
+
+    expect(sanitizeCsvField(malicious1)).toBe("\"'=1+2\"");
+    expect(sanitizeCsvField(malicious2)).toBe("\"'+cmd|\"\"/C calc\"\"!A0\"");
+    expect(sanitizeCsvField(malicious3)).toBe("\"'-100\"");
+    expect(sanitizeCsvField(malicious4)).toBe("\"'@SUM(A1:A10)\"");
+    expect(sanitizeCsvField('normal text')).toBe('"normal text"');
+  });
+
   it('should handle undefined or null safely', () => {
     expect(sanitizeInput(undefined)).toBe('');
     expect(sanitizeInput(null)).toBe('');
     expect(sanitizeInput('')).toBe('');
+    expect(sanitizeCsvField(undefined)).toBe('""');
+    expect(sanitizeCsvField(null)).toBe('""');
   });
 
   it('should validate amounts correctly', () => {
