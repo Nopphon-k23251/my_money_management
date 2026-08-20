@@ -36,31 +36,52 @@ const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [assets, setAssets] = useState<Asset[]>(() => storageService.loadAssets());
-  const [transactions, setTransactions] = useState<Transaction[]>(() => storageService.loadTransactions());
-  const [budgets, setBudgets] = useState<Budget[]>(() => storageService.loadBudgets());
+  const [assets, setAssets] = useState<Asset[]>(() => storageService.loadAssets(user?.id));
+  const [transactions, setTransactions] = useState<Transaction[]>(() => storageService.loadTransactions(user?.id));
+  const [budgets, setBudgets] = useState<Budget[]>(() => storageService.loadBudgets(user?.id));
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const isCloudUpdateRef = useRef(false);
+
+  // Live state refs to prevent stale closure bugs during concurrent state updates
+  const assetsRef = useRef<Asset[]>(assets);
+  const transactionsRef = useRef<Transaction[]>(transactions);
+  const budgetsRef = useRef<Budget[]>(budgets);
+
+  useEffect(() => {
+    assetsRef.current = assets;
+  }, [assets]);
+
+  useEffect(() => {
+    transactionsRef.current = transactions;
+  }, [transactions]);
+
+  useEffect(() => {
+    budgetsRef.current = budgets;
+  }, [budgets]);
 
   const healthScore = evaluateFinancialHealth(assets, transactions);
   const netWorthData = calculateNetWorth(assets);
 
   // Helper to persist locally and sync to Cloud immediately
   const persistAndSync = (
-    newAssets: Asset[],
-    newTx: Transaction[],
-    newBudgets: Budget[]
+    newAssets?: Asset[],
+    newTx?: Transaction[],
+    newBudgets?: Budget[]
   ) => {
-    storageService.saveAssets(newAssets, user?.id);
-    storageService.saveTransactions(newTx, user?.id);
-    storageService.saveBudgets(newBudgets, user?.id);
+    const nextAssets = newAssets ?? assetsRef.current;
+    const nextTx = newTx ?? transactionsRef.current;
+    const nextBudgets = newBudgets ?? budgetsRef.current;
+
+    storageService.saveAssets(nextAssets, user?.id);
+    storageService.saveTransactions(nextTx, user?.id);
+    storageService.saveBudgets(nextBudgets, user?.id);
 
     if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
       storageService.syncToCloud(user.id, {
-        assets: newAssets,
-        transactions: newTx,
-        budgets: newBudgets,
+        assets: nextAssets,
+        transactions: nextTx,
+        budgets: nextBudgets,
       });
     }
   };
@@ -78,17 +99,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (cloudData && (cloudData.assets?.length || cloudData.transactions?.length || cloudData.budgets?.length)) {
         // Cloud has existing data -> adopt cloud data as source of truth
         isCloudUpdateRef.current = true;
-        setAssets(cloudData.assets || []);
-        setTransactions(cloudData.transactions || []);
-        setBudgets(cloudData.budgets || []);
-        storageService.saveAssets(cloudData.assets || []);
-        storageService.saveTransactions(cloudData.transactions || []);
-        storageService.saveBudgets(cloudData.budgets || []);
+        const validAssets = cloudData.assets || [];
+        const validTx = cloudData.transactions || [];
+        const validBudgets = cloudData.budgets || [];
+
+        setAssets(validAssets);
+        setTransactions(validTx);
+        setBudgets(validBudgets);
+        assetsRef.current = validAssets;
+        transactionsRef.current = validTx;
+        budgetsRef.current = validBudgets;
+
+        storageService.saveAssets(validAssets, user.id);
+        storageService.saveTransactions(validTx, user.id);
+        storageService.saveBudgets(validBudgets, user.id);
       } else {
         // Cloud is empty -> migrate current local data to cloud
-        const currentLocalAssets = storageService.loadAssets();
-        const currentLocalTx = storageService.loadTransactions();
-        const currentLocalBudgets = storageService.loadBudgets();
+        const currentLocalAssets = storageService.loadAssets(user.id);
+        const currentLocalTx = storageService.loadTransactions(user.id);
+        const currentLocalBudgets = storageService.loadBudgets(user.id);
         if (currentLocalAssets.length > 0 || currentLocalTx.length > 0 || currentLocalBudgets.length > 0) {
           storageService.syncToCloud(user.id, {
             assets: currentLocalAssets,
@@ -105,15 +134,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isCloudUpdateRef.current = true;
       if (cloudData.assets) {
         setAssets(cloudData.assets);
-        storageService.saveAssets(cloudData.assets);
+        assetsRef.current = cloudData.assets;
+        storageService.saveAssets(cloudData.assets, user.id);
       }
       if (cloudData.transactions) {
         setTransactions(cloudData.transactions);
-        storageService.saveTransactions(cloudData.transactions);
+        transactionsRef.current = cloudData.transactions;
+        storageService.saveTransactions(cloudData.transactions, user.id);
       }
       if (cloudData.budgets) {
         setBudgets(cloudData.budgets);
-        storageService.saveBudgets(cloudData.budgets);
+        budgetsRef.current = cloudData.budgets;
+        storageService.saveBudgets(cloudData.budgets, user.id);
       }
       setTimeout(() => {
         isCloudUpdateRef.current = false;
@@ -135,39 +167,36 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setAssets((prev) => {
-      const next = [newAsset, ...prev];
-      persistAndSync(next, transactions, budgets);
-      return next;
-    });
+    const nextAssets = [newAsset, ...assetsRef.current];
+    assetsRef.current = nextAssets;
+    setAssets(nextAssets);
+    persistAndSync(nextAssets, transactionsRef.current, budgetsRef.current);
   };
 
   const updateAsset = (id: string, data: Partial<Asset>) => {
-    setAssets((prev) => {
-      const next = prev.map((a) =>
-        a.id === id
-          ? {
-              ...a,
-              ...data,
-              name: data.name ? sanitizeInput(data.name) : a.name,
-              bankName: data.bankName ? sanitizeInput(data.bankName) : a.bankName,
-              accountNumber: data.accountNumber ? sanitizeInput(data.accountNumber) : a.accountNumber,
-              notes: data.notes ? sanitizeInput(data.notes) : a.notes,
-              updatedAt: new Date().toISOString(),
-            }
-          : a
-      );
-      persistAndSync(next, transactions, budgets);
-      return next;
-    });
+    const nextAssets = assetsRef.current.map((a) =>
+      a.id === id
+        ? {
+            ...a,
+            ...data,
+            name: data.name ? sanitizeInput(data.name) : a.name,
+            bankName: data.bankName ? sanitizeInput(data.bankName) : a.bankName,
+            accountNumber: data.accountNumber ? sanitizeInput(data.accountNumber) : a.accountNumber,
+            notes: data.notes ? sanitizeInput(data.notes) : a.notes,
+            updatedAt: new Date().toISOString(),
+          }
+        : a
+    );
+    assetsRef.current = nextAssets;
+    setAssets(nextAssets);
+    persistAndSync(nextAssets, transactionsRef.current, budgetsRef.current);
   };
 
   const deleteAsset = (id: string) => {
-    setAssets((prev) => {
-      const next = prev.filter((a) => a.id !== id);
-      persistAndSync(next, transactions, budgets);
-      return next;
-    });
+    const nextAssets = assetsRef.current.filter((a) => a.id !== id);
+    assetsRef.current = nextAssets;
+    setAssets(nextAssets);
+    persistAndSync(nextAssets, transactionsRef.current, budgetsRef.current);
   };
 
   // Transaction Handlers (with auto-balance sync)
@@ -180,39 +209,37 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString(),
     };
 
-    let updatedAssets: Asset[] = [];
-    setAssets((prevAssets) => {
-      updatedAssets = prevAssets.map((asset) => {
-        let newBalance = asset.balance;
-        if (newTx.type === 'income' && newTx.toAssetId === asset.id) {
-          newBalance += newTx.amount;
-        } else if (newTx.type === 'expense' && newTx.fromAssetId === asset.id) {
-          newBalance -= newTx.amount;
-        } else if (newTx.type === 'transfer') {
-          if (newTx.fromAssetId === asset.id) newBalance -= newTx.amount;
-          if (newTx.toAssetId === asset.id) newBalance += newTx.amount;
-        }
-        return { ...asset, balance: newBalance, updatedAt: new Date().toISOString() };
-      });
-      return updatedAssets;
+    // Update asset balances accordingly
+    const nextAssets = assetsRef.current.map((asset) => {
+      let newBalance = asset.balance;
+      if (newTx.type === 'income' && newTx.toAssetId === asset.id) {
+        newBalance += newTx.amount;
+      } else if (newTx.type === 'expense' && newTx.fromAssetId === asset.id) {
+        newBalance -= newTx.amount;
+      } else if (newTx.type === 'transfer') {
+        if (newTx.fromAssetId === asset.id) newBalance -= newTx.amount;
+        if (newTx.toAssetId === asset.id) newBalance += newTx.amount;
+      }
+      return { ...asset, balance: newBalance, updatedAt: new Date().toISOString() };
     });
 
-    setTransactions((prevTx) => {
-      const nextTx = [newTx, ...prevTx];
-      persistAndSync(updatedAssets.length ? updatedAssets : assets, nextTx, budgets);
-      return nextTx;
-    });
+    const nextTx = [newTx, ...transactionsRef.current];
+    assetsRef.current = nextAssets;
+    transactionsRef.current = nextTx;
+    setAssets(nextAssets);
+    setTransactions(nextTx);
+    persistAndSync(nextAssets, nextTx, budgetsRef.current);
   };
 
   const updateTransaction = (id: string, data: Partial<Transaction>) => {
-    const oldTx = transactions.find((t) => t.id === id);
+    const oldTx = transactionsRef.current.find((t) => t.id === id);
     if (!oldTx) return;
 
     // Revert old transaction impact and apply new
-    const nextAssets = assets.map((asset) => {
+    const nextAssets = assetsRef.current.map((asset) => {
       let bal = asset.balance;
       if (oldTx.type === 'income' && oldTx.toAssetId === asset.id) bal -= oldTx.amount;
-      if (oldTx.type === 'expense' && oldTx.fromAssetId === asset.id) bal += oldTx.amount;
+      if (oldTx.type === 'expense' && oldTx.fromAssetId === asset.id) bal -= oldTx.amount;
       if (oldTx.type === 'transfer') {
         if (oldTx.fromAssetId === asset.id) bal += oldTx.amount;
         if (oldTx.toAssetId === asset.id) bal -= oldTx.amount;
@@ -229,7 +256,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
     });
 
-    const nextTx = transactions.map((t) =>
+    const nextTx = transactionsRef.current.map((t) =>
       t.id === id
         ? {
             ...t,
@@ -240,17 +267,19 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         : t
     );
 
+    assetsRef.current = nextAssets;
+    transactionsRef.current = nextTx;
     setAssets(nextAssets);
     setTransactions(nextTx);
-    persistAndSync(nextAssets, nextTx, budgets);
+    persistAndSync(nextAssets, nextTx, budgetsRef.current);
   };
 
   const deleteTransaction = (id: string) => {
-    const tx = transactions.find((t) => t.id === id);
+    const tx = transactionsRef.current.find((t) => t.id === id);
     if (!tx) return;
 
     // Revert balance
-    const nextAssets = assets.map((asset) => {
+    const nextAssets = assetsRef.current.map((asset) => {
       let bal = asset.balance;
       if (tx.type === 'income' && tx.toAssetId === asset.id) bal -= tx.amount;
       if (tx.type === 'expense' && tx.fromAssetId === asset.id) bal += tx.amount;
@@ -261,10 +290,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
     });
 
-    const nextTx = transactions.filter((t) => t.id !== id);
+    const nextTx = transactionsRef.current.filter((t) => t.id !== id);
+    assetsRef.current = nextAssets;
+    transactionsRef.current = nextTx;
     setAssets(nextAssets);
     setTransactions(nextTx);
-    persistAndSync(nextAssets, nextTx, budgets);
+    persistAndSync(nextAssets, nextTx, budgetsRef.current);
   };
 
   const transferFunds = (fromAssetId: string, toAssetId: string, amount: number, note?: string) => {
@@ -283,7 +314,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Budget Handlers
   const addBudget = (category: string, limitAmount: number) => {
     const nextBudgets: Budget[] = [
-      ...budgets,
+      ...budgetsRef.current,
       {
         id: 'b-' + Date.now(),
         category: sanitizeInput(category),
@@ -291,27 +322,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         period: 'monthly',
       },
     ];
+    budgetsRef.current = nextBudgets;
     setBudgets(nextBudgets);
-    persistAndSync(assets, transactions, nextBudgets);
+    persistAndSync(assetsRef.current, transactionsRef.current, nextBudgets);
   };
 
   const updateBudget = (id: string, limitAmount: number) => {
-    const nextBudgets = budgets.map((b) => (b.id === id ? { ...b, limitAmount } : b));
+    const nextBudgets = budgetsRef.current.map((b) => (b.id === id ? { ...b, limitAmount } : b));
+    budgetsRef.current = nextBudgets;
     setBudgets(nextBudgets);
-    persistAndSync(assets, transactions, nextBudgets);
+    persistAndSync(assetsRef.current, transactionsRef.current, nextBudgets);
   };
 
   const deleteBudget = (id: string) => {
-    const nextBudgets = budgets.filter((b) => b.id !== id);
+    const nextBudgets = budgetsRef.current.filter((b) => b.id !== id);
+    budgetsRef.current = nextBudgets;
     setBudgets(nextBudgets);
-    persistAndSync(assets, transactions, nextBudgets);
+    persistAndSync(assetsRef.current, transactionsRef.current, nextBudgets);
   };
 
   const resetData = () => {
-    storageService.resetToDefault();
-    setAssets(storageService.loadAssets());
-    setTransactions(storageService.loadTransactions());
-    setBudgets(storageService.loadBudgets());
+    storageService.resetToDefault(user?.id);
+    setAssets(storageService.loadAssets(user?.id));
+    setTransactions(storageService.loadTransactions(user?.id));
+    setBudgets(storageService.loadBudgets(user?.id));
+    assetsRef.current = [];
+    transactionsRef.current = [];
+    budgetsRef.current = [];
     if (user && !user.isDemoUser) {
       storageService.syncToCloud(user.id, { assets: [], transactions: [], budgets: [] });
     }

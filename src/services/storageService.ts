@@ -89,32 +89,48 @@ export const storageService = {
   },
 
   // --- Cloud Firestore Sync (Multi-Device Realtime Synchronization) ---
-  async syncToCloud(userId: string, data: { assets: Asset[]; transactions: Transaction[]; budgets: Budget[] }): Promise<void> {
-    if (!db || !userId) return;
+  async syncToCloud(userId: string, data: { assets: Asset[]; transactions: Transaction[]; budgets: Budget[] }): Promise<boolean> {
+    if (!db || !userId) {
+      console.warn('[CloudSync] Skipped: db or userId missing', { db: Boolean(db), userId });
+      return false;
+    }
     try {
+      // Deep clone and remove all `undefined` values to prevent Firestore unsupported field value errors
+      const cleanData = JSON.parse(
+        JSON.stringify({
+          assets: data.assets || [],
+          transactions: data.transactions || [],
+          budgets: data.budgets || [],
+          updatedAt: new Date().toISOString(),
+        })
+      );
       const userDocRef = doc(db, 'users_finance', userId);
-      await setDoc(userDocRef, {
-        assets: data.assets || [],
-        transactions: data.transactions || [],
-        budgets: data.budgets || [],
-        updatedAt: new Date().toISOString(),
-      });
+      await setDoc(userDocRef, cleanData);
+      console.info('[CloudSync] Successfully saved to Firestore for user:', userId, 'Assets:', cleanData.assets.length, 'Tx:', cleanData.transactions.length);
+      return true;
     } catch (err) {
-      console.error('Cloud Firestore sync error:', err);
+      console.error('[CloudSync] Fatal error saving to Cloud Firestore:', err);
+      return false;
     }
   },
 
   async loadFromCloud(userId: string): Promise<UserFinanceData | null> {
-    if (!db || !userId) return null;
+    if (!db || !userId) {
+      console.warn('[CloudSync] Load skipped: db or userId missing');
+      return null;
+    }
     try {
       const userDocRef = doc(db, 'users_finance', userId);
       const snapshot = await getDoc(userDocRef);
       if (snapshot.exists()) {
-        return snapshot.data() as UserFinanceData;
+        const data = snapshot.data() as UserFinanceData;
+        console.info('[CloudSync] Loaded existing cloud document for user:', userId, 'Assets:', data.assets?.length, 'Tx:', data.transactions?.length);
+        return data;
       }
+      console.info('[CloudSync] No cloud document found for user yet:', userId);
       return null;
     } catch (err) {
-      console.error('Failed to fetch from Cloud Firestore:', err);
+      console.error('[CloudSync] Failed to fetch from Cloud Firestore:', err);
       return null;
     }
   },
@@ -130,11 +146,12 @@ export const storageService = {
       (snapshot) => {
         if (snapshot.exists()) {
           const cloudData = snapshot.data() as UserFinanceData;
+          console.info('[CloudSync] Realtime cloud update received for user:', userId, 'Tx:', cloudData.transactions?.length);
           onUpdate(cloudData);
         }
       },
       (error) => {
-        console.error('Firestore realtime subscription error:', error);
+        console.error('[CloudSync] Firestore realtime subscription error:', error);
       }
     );
     return unsubscribe;
