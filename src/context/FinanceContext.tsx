@@ -52,9 +52,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     newTx: Transaction[],
     newBudgets: Budget[]
   ) => {
-    storageService.saveAssets(newAssets);
-    storageService.saveTransactions(newTx);
-    storageService.saveBudgets(newBudgets);
+    storageService.saveAssets(newAssets, user?.id);
+    storageService.saveTransactions(newTx, user?.id);
+    storageService.saveBudgets(newBudgets, user?.id);
 
     if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
       storageService.syncToCloud(user.id, {

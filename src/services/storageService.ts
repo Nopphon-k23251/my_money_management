@@ -2,9 +2,9 @@ import type { Asset, Transaction, Budget } from '../types/finance';
 import { db } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
-const ASSETS_KEY = 'mm_assets_v1';
-const TRANSACTIONS_KEY = 'mm_transactions_v1';
-const BUDGETS_KEY = 'mm_budgets_v1';
+const BASE_ASSETS_KEY = 'mm_assets_v1';
+const BASE_TRANSACTIONS_KEY = 'mm_transactions_v1';
+const BASE_BUDGETS_KEY = 'mm_budgets_v1';
 
 export const INITIAL_ASSETS: Asset[] = [];
 export const INITIAL_TRANSACTIONS: Transaction[] = [];
@@ -18,53 +18,71 @@ export interface UserFinanceData {
 }
 
 export const storageService = {
+  getStorageKeys(userId?: string) {
+    const prefix = userId ? `mm_${userId}` : 'mm_guest';
+    return {
+      assets: `${prefix}_assets_v1`,
+      transactions: `${prefix}_transactions_v1`,
+      budgets: `${prefix}_budgets_v1`,
+    };
+  },
+
   // --- LocalStorage (Fast & Offline) ---
-  loadAssets(): Asset[] {
+  loadAssets(userId?: string): Asset[] {
     try {
-      const data = localStorage.getItem(ASSETS_KEY);
+      const key = this.getStorageKeys(userId).assets;
+      const data = localStorage.getItem(key) || localStorage.getItem(BASE_ASSETS_KEY);
       return data ? JSON.parse(data) : INITIAL_ASSETS;
     } catch {
       return INITIAL_ASSETS;
     }
   },
 
-  saveAssets(assets: Asset[]): void {
+  saveAssets(assets: Asset[], userId?: string): void {
     try {
-      localStorage.setItem(ASSETS_KEY, JSON.stringify(assets));
+      const key = this.getStorageKeys(userId).assets;
+      localStorage.setItem(key, JSON.stringify(assets));
+      localStorage.setItem(BASE_ASSETS_KEY, JSON.stringify(assets));
     } catch (e) {
       console.error('Failed to save assets:', e);
     }
   },
 
-  loadTransactions(): Transaction[] {
+  loadTransactions(userId?: string): Transaction[] {
     try {
-      const data = localStorage.getItem(TRANSACTIONS_KEY);
+      const key = this.getStorageKeys(userId).transactions;
+      const data = localStorage.getItem(key) || localStorage.getItem(BASE_TRANSACTIONS_KEY);
       return data ? JSON.parse(data) : INITIAL_TRANSACTIONS;
     } catch {
       return INITIAL_TRANSACTIONS;
     }
   },
 
-  saveTransactions(transactions: Transaction[]): void {
+  saveTransactions(transactions: Transaction[], userId?: string): void {
     try {
-      localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+      const key = this.getStorageKeys(userId).transactions;
+      localStorage.setItem(key, JSON.stringify(transactions));
+      localStorage.setItem(BASE_TRANSACTIONS_KEY, JSON.stringify(transactions));
     } catch (e) {
       console.error('Failed to save transactions:', e);
     }
   },
 
-  loadBudgets(): Budget[] {
+  loadBudgets(userId?: string): Budget[] {
     try {
-      const data = localStorage.getItem(BUDGETS_KEY);
+      const key = this.getStorageKeys(userId).budgets;
+      const data = localStorage.getItem(key) || localStorage.getItem(BASE_BUDGETS_KEY);
       return data ? JSON.parse(data) : INITIAL_BUDGETS;
     } catch {
       return INITIAL_BUDGETS;
     }
   },
 
-  saveBudgets(budgets: Budget[]): void {
+  saveBudgets(budgets: Budget[], userId?: string): void {
     try {
-      localStorage.setItem(BUDGETS_KEY, JSON.stringify(budgets));
+      const key = this.getStorageKeys(userId).budgets;
+      localStorage.setItem(key, JSON.stringify(budgets));
+      localStorage.setItem(BASE_BUDGETS_KEY, JSON.stringify(budgets));
     } catch (e) {
       console.error('Failed to save budgets:', e);
     }
@@ -76,11 +94,13 @@ export const storageService = {
     try {
       const userDocRef = doc(db, 'users_finance', userId);
       await setDoc(userDocRef, {
-        ...data,
+        assets: data.assets || [],
+        transactions: data.transactions || [],
+        budgets: data.budgets || [],
         updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      });
     } catch (err) {
-      console.warn('Cloud sync error (will keep in localStorage):', err);
+      console.error('Cloud Firestore sync error:', err);
     }
   },
 
@@ -94,7 +114,7 @@ export const storageService = {
       }
       return null;
     } catch (err) {
-      console.warn('Failed to fetch from Cloud Firestore:', err);
+      console.error('Failed to fetch from Cloud Firestore:', err);
       return null;
     }
   },
@@ -114,16 +134,20 @@ export const storageService = {
         }
       },
       (error) => {
-        console.warn('Firestore realtime subscription error:', error);
+        console.error('Firestore realtime subscription error:', error);
       }
     );
     return unsubscribe;
   },
 
-  resetToDefault(): void {
-    localStorage.removeItem(ASSETS_KEY);
-    localStorage.removeItem(TRANSACTIONS_KEY);
-    localStorage.removeItem(BUDGETS_KEY);
+  resetToDefault(userId?: string): void {
+    const keys = this.getStorageKeys(userId);
+    localStorage.removeItem(keys.assets);
+    localStorage.removeItem(keys.transactions);
+    localStorage.removeItem(keys.budgets);
+    localStorage.removeItem(BASE_ASSETS_KEY);
+    localStorage.removeItem(BASE_TRANSACTIONS_KEY);
+    localStorage.removeItem(BASE_BUDGETS_KEY);
   },
 };
 
