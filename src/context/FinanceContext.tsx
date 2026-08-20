@@ -135,33 +135,39 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const nextAssets = [newAsset, ...assets];
-    setAssets(nextAssets);
-    persistAndSync(nextAssets, transactions, budgets);
+    setAssets((prev) => {
+      const next = [newAsset, ...prev];
+      persistAndSync(next, transactions, budgets);
+      return next;
+    });
   };
 
   const updateAsset = (id: string, data: Partial<Asset>) => {
-    const nextAssets = assets.map((a) =>
-      a.id === id
-        ? {
-            ...a,
-            ...data,
-            name: data.name ? sanitizeInput(data.name) : a.name,
-            bankName: data.bankName ? sanitizeInput(data.bankName) : a.bankName,
-            accountNumber: data.accountNumber ? sanitizeInput(data.accountNumber) : a.accountNumber,
-            notes: data.notes ? sanitizeInput(data.notes) : a.notes,
-            updatedAt: new Date().toISOString(),
-          }
-        : a
-    );
-    setAssets(nextAssets);
-    persistAndSync(nextAssets, transactions, budgets);
+    setAssets((prev) => {
+      const next = prev.map((a) =>
+        a.id === id
+          ? {
+              ...a,
+              ...data,
+              name: data.name ? sanitizeInput(data.name) : a.name,
+              bankName: data.bankName ? sanitizeInput(data.bankName) : a.bankName,
+              accountNumber: data.accountNumber ? sanitizeInput(data.accountNumber) : a.accountNumber,
+              notes: data.notes ? sanitizeInput(data.notes) : a.notes,
+              updatedAt: new Date().toISOString(),
+            }
+          : a
+      );
+      persistAndSync(next, transactions, budgets);
+      return next;
+    });
   };
 
   const deleteAsset = (id: string) => {
-    const nextAssets = assets.filter((a) => a.id !== id);
-    setAssets(nextAssets);
-    persistAndSync(nextAssets, transactions, budgets);
+    setAssets((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      persistAndSync(next, transactions, budgets);
+      return next;
+    });
   };
 
   // Transaction Handlers (with auto-balance sync)
@@ -174,24 +180,28 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString(),
     };
 
-    // Update asset balances accordingly
-    const nextAssets = assets.map((asset) => {
-      let newBalance = asset.balance;
-      if (newTx.type === 'income' && newTx.toAssetId === asset.id) {
-        newBalance += newTx.amount;
-      } else if (newTx.type === 'expense' && newTx.fromAssetId === asset.id) {
-        newBalance -= newTx.amount;
-      } else if (newTx.type === 'transfer') {
-        if (newTx.fromAssetId === asset.id) newBalance -= newTx.amount;
-        if (newTx.toAssetId === asset.id) newBalance += newTx.amount;
-      }
-      return { ...asset, balance: newBalance, updatedAt: new Date().toISOString() };
+    let updatedAssets: Asset[] = [];
+    setAssets((prevAssets) => {
+      updatedAssets = prevAssets.map((asset) => {
+        let newBalance = asset.balance;
+        if (newTx.type === 'income' && newTx.toAssetId === asset.id) {
+          newBalance += newTx.amount;
+        } else if (newTx.type === 'expense' && newTx.fromAssetId === asset.id) {
+          newBalance -= newTx.amount;
+        } else if (newTx.type === 'transfer') {
+          if (newTx.fromAssetId === asset.id) newBalance -= newTx.amount;
+          if (newTx.toAssetId === asset.id) newBalance += newTx.amount;
+        }
+        return { ...asset, balance: newBalance, updatedAt: new Date().toISOString() };
+      });
+      return updatedAssets;
     });
 
-    const nextTx = [newTx, ...transactions];
-    setAssets(nextAssets);
-    setTransactions(nextTx);
-    persistAndSync(nextAssets, nextTx, budgets);
+    setTransactions((prevTx) => {
+      const nextTx = [newTx, ...prevTx];
+      persistAndSync(updatedAssets.length ? updatedAssets : assets, nextTx, budgets);
+      return nextTx;
+    });
   };
 
   const updateTransaction = (id: string, data: Partial<Transaction>) => {
