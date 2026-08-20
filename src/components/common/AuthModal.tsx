@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { X, Lock, Mail, User, AlertCircle } from 'lucide-react';
-import { validatePasswordNIST, checkRateLimit, sanitizeInput } from '../../utils/security';
+import { validatePasswordNIST, checkRateLimit, resetRateLimit, sanitizeInput } from '../../utils/security';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { loginWithGoogle, loginWithCustom, isLoading } = useAuth();
+  const { loginWithGoogle, loginWithEmailPassword, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +31,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -43,24 +43,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       return;
     }
 
+    if (!password) {
+      setErrorMessage('กรุณากรอกรหัสผ่าน');
+      return;
+    }
+
     // Rate Limiting Protection (Max 5 attempts per 1 minute window)
-    const rateCheck = checkRateLimit(`login-${cleanEmail.toLowerCase()}`, 5, 60000);
+    const rateLimitKey = `login-${cleanEmail.toLowerCase()}`;
+    const rateCheck = checkRateLimit(rateLimitKey, 5, 60000);
     if (!rateCheck.allowed) {
       setErrorMessage(`พยายามเข้าสู่ระบบถี่เกินไป กรุณารอ ${rateCheck.retryAfterSeconds} วินาทีก่อนลองใหม่`);
       return;
     }
 
     // NIST Password Policy enforcement for registration / password auth
-    if (password) {
-      const passwordCheck = validatePasswordNIST(password);
-      if (!passwordCheck.isValid) {
-        setErrorMessage(passwordCheck.error || 'รหัสผ่านไม่ผ่านเกณฑ์ความปลอดภัย');
-        return;
-      }
+    const passwordCheck = validatePasswordNIST(password);
+    if (!passwordCheck.isValid) {
+      setErrorMessage(passwordCheck.error || 'รหัสผ่านไม่ผ่านเกณฑ์ความปลอดภัย');
+      return;
     }
 
-    loginWithCustom(cleanEmail, cleanName);
-    onClose();
+    try {
+      await loginWithEmailPassword(cleanEmail, password, isRegister, cleanName);
+      resetRateLimit(rateLimitKey);
+      onClose();
+    } catch (err: unknown) {
+      console.error('Auth error:', err);
+      const error = err as { code?: string; message?: string };
+      if (error.code === 'auth/email-already-in-use') {
+        setErrorMessage('อีเมลนี้ถูกใช้งานแล้ว กรุณาเข้าสู่ระบบแทน');
+      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        setErrorMessage('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+      } else if (error.code === 'auth/weak-password') {
+        setErrorMessage('รหัสผ่านคาดเดาง่ายเกินไป (ต้องมีอย่างน้อย 8 ตัวอักษร)');
+      } else if (error.code === 'auth/too-many-requests') {
+        setErrorMessage('มีการพยายามเข้าใช้งานมากเกินไป ระบบระงับชั่วคราวเพื่อความปลอดภัย');
+      } else {
+        setErrorMessage('เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์ กรุณาลองใหม่อีกครั้ง');
+      }
+    }
   };
 
   const handleGoogleLogin = async () => {

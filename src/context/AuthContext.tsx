@@ -2,7 +2,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { UserProfile } from '../types/finance';
 
 import { auth, googleProvider, isFirebaseConfigured } from '../services/firebase';
-import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import {
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+} from 'firebase/auth';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -10,6 +17,7 @@ interface AuthContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   loginWithGoogle: () => Promise<void>;
+  loginWithEmailPassword: (email: string, password: string, isRegister?: boolean, displayName?: string) => Promise<void>;
   loginWithCustom: (email: string, name: string) => void;
   logout: () => Promise<void>;
   updateUserCurrency: (currency: string) => void;
@@ -104,6 +112,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
 
+  const loginWithEmailPassword = async (
+    email: string,
+    password: string,
+    isRegister: boolean = false,
+    displayName: string = ''
+  ) => {
+    setIsLoading(true);
+    try {
+      if (isFirebaseConfigured && auth) {
+        if (isRegister) {
+          const userCred = await createUserWithEmailAndPassword(auth, email, password);
+          if (displayName.trim()) {
+            await updateProfile(userCred.user, { displayName: displayName.trim() });
+          }
+          const profile: UserProfile = {
+            id: userCred.user.uid,
+            email: userCred.user.email || '',
+            displayName: displayName.trim() || userCred.user.email?.split('@')[0] || 'User',
+            currency: 'THB',
+            theme: 'light',
+            isDemoUser: false,
+          };
+          setUser(profile);
+          localStorage.setItem('mm_user_session', JSON.stringify(profile));
+        } else {
+          const userCred = await signInWithEmailAndPassword(auth, email, password);
+          const profile: UserProfile = {
+            id: userCred.user.uid,
+            email: userCred.user.email || '',
+            displayName: userCred.user.displayName || userCred.user.email?.split('@')[0] || 'User',
+            photoURL: userCred.user.photoURL || undefined,
+            currency: 'THB',
+            theme: 'light',
+            isDemoUser: false,
+          };
+          setUser(profile);
+          localStorage.setItem('mm_user_session', JSON.stringify(profile));
+        }
+      } else {
+        // Fallback local custom session
+        loginWithCustom(email, displayName || email.split('@')[0]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const loginWithCustom = (email: string, name: string) => {
     const customUser: UserProfile = {
       id: 'custom-' + Date.now(),
@@ -140,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         theme,
         toggleTheme,
         loginWithGoogle,
+        loginWithEmailPassword,
         loginWithCustom,
         logout,
         updateUserCurrency,
