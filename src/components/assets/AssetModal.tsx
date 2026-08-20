@@ -66,6 +66,18 @@ export const AssetModal: React.FC<AssetModalProps> = ({
     setError('');
   }, [initialAsset, isOpen]);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -96,9 +108,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-xs flex min-h-screen items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full my-auto flex flex-col p-4 sm:p-6 shadow-2xl border border-slate-200/80 dark:border-slate-800 relative max-h-[calc(100dvh-2rem)] animate-fadeIn">
-        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs overscroll-contain">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full flex flex-col shadow-2xl border border-slate-200/80 dark:border-slate-800 relative max-h-[92dvh] sm:max-h-[85vh] overflow-hidden animate-fadeIn">
+        {/* Fixed Header Bar */}
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
               {initialAsset ? 'แก้ไขบัญชีทรัพย์สิน' : 'เพิ่มบัญชีทรัพย์สินใหม่'}
@@ -109,6 +122,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
@@ -117,18 +131,19 @@ export const AssetModal: React.FC<AssetModalProps> = ({
         </div>
 
         {error && (
-          <div className="p-3 mb-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-300 font-medium">
+          <div className="mx-4 mt-3 sm:mx-6 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-300 font-medium shrink-0">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1 pr-1 pb-1">
-          {/* Asset Type */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              ประเภททรัพย์สิน / หนี้สิน *
-            </label>
-            <div className="grid grid-cols-3 gap-1.5">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="space-y-3.5 sm:space-y-4 overflow-y-auto p-4 sm:p-6 flex-1 overscroll-contain">
+            {/* Asset Type */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                ประเภททรัพย์สิน / หนี้สิน *
+              </label>
+              <div className="grid grid-cols-3 gap-1.5">
               {ASSET_TYPES.map((t) => {
                 const isSelected = type === t.id;
                 const Icon = t.icon;
@@ -239,31 +254,33 @@ export const AssetModal: React.FC<AssetModalProps> = ({
             </div>
           </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              บันทึกเพิ่มเติม
-            </label>
-            <input
-              type="text"
-              placeholder="เช่น บัญชีเงินเดือน, เงินเก็บฉุกเฉิน"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-            />
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                บันทึกเพิ่มเติม
+              </label>
+              <input
+                type="text"
+                placeholder="เช่น บัญชีเงินเดือน, เงินเก็บฉุกเฉิน"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
           </div>
 
-          <div className="flex gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+          {/* Fixed Footer with Action Buttons */}
+          <div className="flex gap-2.5 p-3 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="flex-1 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs"
+              className="flex-1 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all shadow-xs active:scale-98"
             >
               {initialAsset ? 'บันทึกการแก้ไข' : 'สร้างบัญชี'}
             </button>
