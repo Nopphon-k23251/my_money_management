@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useFinance } from '../../context/FinanceContext';
 import { X, ArrowRightLeft } from 'lucide-react';
 
@@ -50,8 +51,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({ isOpen, onClose })
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs overscroll-contain">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs overscroll-contain">
       <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full flex flex-col shadow-2xl border border-slate-200/80 dark:border-slate-800 relative max-h-[92dvh] sm:max-h-[85vh] overflow-hidden animate-fadeIn">
         {/* Fixed Header Bar */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
@@ -166,7 +167,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({ isOpen, onClose })
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

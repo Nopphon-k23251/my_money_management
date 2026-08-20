@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 export interface ToastMessage {
@@ -15,8 +16,8 @@ interface ToastProps {
 export const ToastContainer: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
   if (toasts.length === 0) return null;
 
-  return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full px-4 pointer-events-none">
+  return createPortal(
+    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-md w-full px-4 pointer-events-none">
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -43,7 +44,8 @@ export const ToastContainer: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
           </button>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -64,11 +66,23 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   description,
   itemDetails,
 }) => {
+  // Lock body scroll when modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-xs flex min-h-screen items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-xl max-w-sm w-full my-auto p-5 sm:p-6 shadow-2xl border border-slate-200/80 dark:border-slate-800 relative animate-fadeIn">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overscroll-contain">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-slate-200/80 dark:border-slate-800 relative animate-fadeIn">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -112,6 +126,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

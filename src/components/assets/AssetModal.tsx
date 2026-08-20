@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Asset, AssetType } from '../../types/finance';
 import { X, Wallet, Landmark, TrendingUp, CreditCard, Layers } from 'lucide-react';
 
@@ -107,8 +108,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs overscroll-contain">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs overscroll-contain">
       <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full flex flex-col shadow-2xl border border-slate-200/80 dark:border-slate-800 relative max-h-[92dvh] sm:max-h-[85vh] overflow-hidden animate-fadeIn">
         {/* Fixed Header Bar */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
@@ -287,6 +288,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
