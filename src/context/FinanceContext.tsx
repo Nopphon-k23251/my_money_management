@@ -40,67 +40,70 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [transactions, setTransactions] = useState<Transaction[]>(() => storageService.loadTransactions());
   const [budgets, setBudgets] = useState<Budget[]>(() => storageService.loadBudgets());
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const isCloudUpdateRef = useRef(false);
 
   // Subscribe to Cloud Firestore when a user is logged in
   useEffect(() => {
-    if (!user || user.isDemoUser) return;
+    if (!user || user.isDemoUser) {
+      setIsInitialized(true);
+      return;
+    }
 
     setIsSyncing(true);
 
-    // Initial check & auto-migration: if cloud is empty but local has data, upload local data
+    // Initial fetch from Cloud
     storageService.loadFromCloud(user.id).then((cloudData) => {
-      if (cloudData) {
+      if (cloudData && (cloudData.assets?.length || cloudData.transactions?.length || cloudData.budgets?.length)) {
+        // Cloud has existing data -> adopt cloud data as source of truth
         isCloudUpdateRef.current = true;
         setAssets(cloudData.assets || []);
         setTransactions(cloudData.transactions || []);
         setBudgets(cloudData.budgets || []);
       } else {
-        // First-time sync: migrate existing local data to cloud
-        const currentLocal = {
-          assets: storageService.loadAssets(),
-          transactions: storageService.loadTransactions(),
-          budgets: storageService.loadBudgets(),
-        };
-        storageService.syncToCloud(user.id, currentLocal);
+        // Cloud is empty -> migrate current local data to cloud
+        const currentLocalAssets = storageService.loadAssets();
+        const currentLocalTx = storageService.loadTransactions();
+        const currentLocalBudgets = storageService.loadBudgets();
+        if (currentLocalAssets.length > 0 || currentLocalTx.length > 0 || currentLocalBudgets.length > 0) {
+          storageService.syncToCloud(user.id, {
+            assets: currentLocalAssets,
+            transactions: currentLocalTx,
+            budgets: currentLocalBudgets,
+          });
+        }
       }
+      setIsInitialized(true);
       setIsSyncing(false);
     });
 
-    // Setup Realtime multi-device subscription
+    // Realtime Listener across devices
     const unsubscribe = storageService.subscribeToCloud(user.id, (cloudData) => {
       isCloudUpdateRef.current = true;
       if (cloudData.assets) setAssets(cloudData.assets);
       if (cloudData.transactions) setTransactions(cloudData.transactions);
       if (cloudData.budgets) setBudgets(cloudData.budgets);
+      setTimeout(() => {
+        isCloudUpdateRef.current = false;
+      }, 100);
     });
 
     return () => unsubscribe();
   }, [user?.id]);
 
-  // Persist locally & Sync to Cloud when user makes changes
+  // Persist locally & Sync to Cloud only after initialization and when user makes local changes
   useEffect(() => {
+    if (!isInitialized) return;
+
     storageService.saveAssets(assets);
-    if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
-      storageService.syncToCloud(user.id, { assets, transactions, budgets });
-    }
-  }, [assets, user?.id]);
-
-  useEffect(() => {
     storageService.saveTransactions(transactions);
-    if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
-      storageService.syncToCloud(user.id, { assets, transactions, budgets });
-    }
-  }, [transactions, user?.id]);
-
-  useEffect(() => {
     storageService.saveBudgets(budgets);
+
     if (user && !user.isDemoUser && !isCloudUpdateRef.current) {
       storageService.syncToCloud(user.id, { assets, transactions, budgets });
     }
-    isCloudUpdateRef.current = false;
-  }, [budgets, user?.id]);
+  }, [assets, transactions, budgets, isInitialized, user?.id]);
 
   const healthScore = evaluateFinancialHealth(assets, transactions);
   const netWorthData = calculateNetWorth(assets);
