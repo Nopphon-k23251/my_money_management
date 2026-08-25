@@ -3,7 +3,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useFinance } from '../../context/FinanceContext';
 import { AuthModal } from '../common/AuthModal';
 import {
-  Wallet,
   PlusCircle,
   ArrowLeftRight,
   LogOut,
@@ -32,12 +31,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAddTransaction, onOpenTran
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
-                <Wallet className="w-4 h-4" />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/25 ring-1 ring-white/20 shrink-0">
+                <svg viewBox="0 0 24 24" className="w-4 h-4 sm:w-5 sm:h-5" fill="none">
+                  {/* Modern Wallet / Shield Outline */}
+                  <rect x="3" y="5" width="18" height="14" rx="3.5" stroke="currentColor" strokeWidth="1.8" strokeOpacity="0.9" />
+                  {/* Growth Trendline (Emerald) */}
+                  <path d="M7 14.5L10.5 11L13 13.5L17 9" stroke="#34D399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M14.5 9H17V11.5" stroke="#34D399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  {/* Wealth Spark / Gold Dot */}
+                  <circle cx="17.5" cy="6.5" r="1.5" fill="#FBBF24" />
+                </svg>
               </div>
               <div className="min-w-0 flex items-center gap-1.5 sm:gap-2">
-                <span className="font-bold text-sm sm:text-base bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-800 dark:from-white dark:via-indigo-200 dark:to-indigo-400 bg-clip-text text-transparent truncate block">
+                <span className="font-extrabold text-sm sm:text-base tracking-tight bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-700 dark:from-white dark:via-indigo-200 dark:to-indigo-400 bg-clip-text text-transparent truncate block">
                   WealthWise Pro
                 </span>
                 {user && (
