@@ -49,8 +49,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [description, setDescription] = useState('');
   const [tagsInput, setTagsInput] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    setIsSubmitting(false);
     if (initialTx) {
       setType(initialTx.type);
       setAmount(String(initialTx.amount));
@@ -96,6 +98,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
       setError('กรุณากรอกจำนวนเงินให้ถูกต้องและมากกว่า 0');
@@ -105,6 +109,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setError('กรุณาเลือกบัญชีที่ต้องการบันทึก');
       return;
     }
+
+    setIsSubmitting(true);
 
     const tags = tagsInput
       .split(',')
@@ -288,7 +294,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </button>
             <button
               type="submit"
-              className={`flex-1 py-2 text-xs font-bold text-white rounded-lg transition-all shadow-xs active:scale-98 ${
+              disabled={isSubmitting}
+              className={`flex-1 py-2 text-xs font-bold text-white rounded-lg transition-all shadow-xs active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed ${
                 type === 'income'
                   ? 'bg-emerald-600 hover:bg-emerald-700'
                   : 'bg-rose-600 hover:bg-rose-700'

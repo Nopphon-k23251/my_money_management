@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import type { Asset, Transaction, Budget, FinancialHealthScore, ActiveTab } from '../types/finance';
 import { useAuth } from './AuthContext';
 import { storageService } from '../services/storageService';
-import { evaluateFinancialHealth, calculateNetWorth } from '../utils/financialAnalysis';
+import { evaluateFinancialHealth, calculateNetWorth, calculateBalancesOnAdd, calculateBalancesOnUpdate, calculateBalancesOnDelete } from '../utils/financialAnalysis';
 import { sanitizeInput } from '../utils/security';
 
 interface FinanceContextType {
@@ -209,21 +209,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString(),
     };
 
-    // Update asset balances accordingly
-    const nextAssets = assetsRef.current.map((asset) => {
-      let newBalance = asset.balance;
-      if (newTx.type === 'income' && newTx.toAssetId === asset.id) {
-        newBalance += newTx.amount;
-      } else if (newTx.type === 'expense' && newTx.fromAssetId === asset.id) {
-        newBalance -= newTx.amount;
-      } else if (newTx.type === 'transfer') {
-        if (newTx.fromAssetId === asset.id) newBalance -= newTx.amount;
-        if (newTx.toAssetId === asset.id) newBalance += newTx.amount;
-      }
-      return { ...asset, balance: newBalance, updatedAt: new Date().toISOString() };
-    });
-
+    const nextAssets = calculateBalancesOnAdd(assetsRef.current, newTx);
     const nextTx = [newTx, ...transactionsRef.current];
+
     assetsRef.current = nextAssets;
     transactionsRef.current = nextTx;
     setAssets(nextAssets);
@@ -235,26 +223,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const oldTx = transactionsRef.current.find((t) => t.id === id);
     if (!oldTx) return;
 
-    // Revert old transaction impact and apply new
-    const nextAssets = assetsRef.current.map((asset) => {
-      let bal = asset.balance;
-      if (oldTx.type === 'income' && oldTx.toAssetId === asset.id) bal -= oldTx.amount;
-      if (oldTx.type === 'expense' && oldTx.fromAssetId === asset.id) bal -= oldTx.amount;
-      if (oldTx.type === 'transfer') {
-        if (oldTx.fromAssetId === asset.id) bal += oldTx.amount;
-        if (oldTx.toAssetId === asset.id) bal -= oldTx.amount;
-      }
-
-      const merged: Transaction = { ...oldTx, ...data };
-      if (merged.type === 'income' && merged.toAssetId === asset.id) bal += merged.amount;
-      if (merged.type === 'expense' && merged.fromAssetId === asset.id) bal -= merged.amount;
-      if (merged.type === 'transfer') {
-        if (merged.fromAssetId === asset.id) bal -= merged.amount;
-        if (merged.toAssetId === asset.id) bal += merged.amount;
-      }
-
-      return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
-    });
+    const nextAssets = calculateBalancesOnUpdate(assetsRef.current, oldTx, data);
 
     const nextTx = transactionsRef.current.map((t) =>
       t.id === id
@@ -278,19 +247,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const tx = transactionsRef.current.find((t) => t.id === id);
     if (!tx) return;
 
-    // Revert balance
-    const nextAssets = assetsRef.current.map((asset) => {
-      let bal = asset.balance;
-      if (tx.type === 'income' && tx.toAssetId === asset.id) bal -= tx.amount;
-      if (tx.type === 'expense' && tx.fromAssetId === asset.id) bal += tx.amount;
-      if (tx.type === 'transfer') {
-        if (tx.fromAssetId === asset.id) bal += tx.amount;
-        if (tx.toAssetId === asset.id) bal -= tx.amount;
-      }
-      return { ...asset, balance: bal, updatedAt: new Date().toISOString() };
-    });
-
+    const nextAssets = calculateBalancesOnDelete(assetsRef.current, tx);
     const nextTx = transactionsRef.current.filter((t) => t.id !== id);
+
     assetsRef.current = nextAssets;
     transactionsRef.current = nextTx;
     setAssets(nextAssets);

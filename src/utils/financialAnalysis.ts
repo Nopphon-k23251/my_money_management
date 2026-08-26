@@ -176,3 +176,90 @@ export function evaluateFinancialHealth(
     recommendations,
   };
 }
+
+/**
+ * Calculates updated asset balances when a new transaction is added.
+ */
+export function calculateBalancesOnAdd(
+  assets: Asset[],
+  tx: Omit<Transaction, 'id' | 'createdAt'>
+): Asset[] {
+  return assets.map((asset) => {
+    let bal = asset.balance;
+    if (tx.type === 'income' && tx.toAssetId === asset.id) {
+      bal += tx.amount;
+    } else if (tx.type === 'expense' && tx.fromAssetId === asset.id) {
+      bal -= tx.amount;
+    } else if (tx.type === 'transfer') {
+      if (tx.fromAssetId === asset.id) bal -= tx.amount;
+      if (tx.toAssetId === asset.id) bal += tx.amount;
+    }
+    return bal !== asset.balance
+      ? { ...asset, balance: bal, updatedAt: new Date().toISOString() }
+      : asset;
+  });
+}
+
+/**
+ * Calculates updated asset balances when an existing transaction is edited.
+ * Accurately refunds/reverts the old transaction impact before applying the new impact.
+ */
+export function calculateBalancesOnUpdate(
+  assets: Asset[],
+  oldTx: Transaction,
+  data: Partial<Transaction>
+): Asset[] {
+  const merged: Transaction = { ...oldTx, ...data };
+  return assets.map((asset) => {
+    let bal = asset.balance;
+
+    // 1. Revert previous transaction impact
+    if (oldTx.type === 'income' && oldTx.toAssetId === asset.id) {
+      bal -= oldTx.amount;
+    } else if (oldTx.type === 'expense' && oldTx.fromAssetId === asset.id) {
+      bal += oldTx.amount; // Revert previous expense by adding back amount
+    } else if (oldTx.type === 'transfer') {
+      if (oldTx.fromAssetId === asset.id) bal += oldTx.amount;
+      if (oldTx.toAssetId === asset.id) bal -= oldTx.amount;
+    }
+
+    // 2. Apply newly edited transaction impact
+    if (merged.type === 'income' && merged.toAssetId === asset.id) {
+      bal += merged.amount;
+    } else if (merged.type === 'expense' && merged.fromAssetId === asset.id) {
+      bal -= merged.amount;
+    } else if (merged.type === 'transfer') {
+      if (merged.fromAssetId === asset.id) bal -= merged.amount;
+      if (merged.toAssetId === asset.id) bal += merged.amount;
+    }
+
+    return bal !== asset.balance
+      ? { ...asset, balance: bal, updatedAt: new Date().toISOString() }
+      : asset;
+  });
+}
+
+/**
+ * Calculates updated asset balances when a transaction is deleted.
+ * Reverts the deleted transaction impact.
+ */
+export function calculateBalancesOnDelete(
+  assets: Asset[],
+  tx: Transaction
+): Asset[] {
+  return assets.map((asset) => {
+    let bal = asset.balance;
+    if (tx.type === 'income' && tx.toAssetId === asset.id) {
+      bal -= tx.amount;
+    } else if (tx.type === 'expense' && tx.fromAssetId === asset.id) {
+      bal += tx.amount;
+    } else if (tx.type === 'transfer') {
+      if (tx.fromAssetId === asset.id) bal += tx.amount;
+      if (tx.toAssetId === asset.id) bal -= tx.amount;
+    }
+    return bal !== asset.balance
+      ? { ...asset, balance: bal, updatedAt: new Date().toISOString() }
+      : asset;
+  });
+}
+
