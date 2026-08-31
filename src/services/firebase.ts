@@ -1,16 +1,6 @@
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import {
-  initializeAuth,
-  browserLocalPersistence,
-  browserSessionPersistence,
-  indexedDBLocalPersistence,
-  inMemoryPersistence,
-  getAuth,
-  GoogleAuthProvider,
-  type Auth,
-} from 'firebase/auth';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
-
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDzCkfpVumte994Yv9GpalDAp9eXeT7SdM',
@@ -24,42 +14,12 @@ const firebaseConfig = {
 
 export const isFirebaseConfigured = true;
 
-let app: FirebaseApp | undefined;
-let auth: Auth | undefined;
-let db: Firestore | undefined;
-let googleProvider: GoogleAuthProvider | undefined;
-
-if (isFirebaseConfigured) {
-  try {
-    const isNewApp = getApps().length === 0;
-    app = isNewApp ? initializeApp(firebaseConfig) : getApps()[0];
-
-    // Use browserLocalPersistence to prevent IndexedDB "Database is closing/hidden" visibilitychange bug
-    try {
-      auth = isNewApp
-        ? initializeAuth(app, {
-            persistence: [
-              browserLocalPersistence,
-              browserSessionPersistence,
-              indexedDBLocalPersistence,
-              inMemoryPersistence,
-            ],
-          })
-        : getAuth(app);
-    } catch {
-      auth = getAuth(app);
-    }
-
-    db = getFirestore(app);
-    googleProvider = new GoogleAuthProvider();
-    googleProvider.setCustomParameters({
-      prompt: 'select_account',
-    });
-  } catch (err) {
-    console.warn('Firebase initialization skipped or failed:', err);
-  }
-}
+const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const auth: Auth = getAuth(app);
+const db: Firestore = getFirestore(app);
+const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 
 export { app, auth, db, googleProvider };
+
 
 
