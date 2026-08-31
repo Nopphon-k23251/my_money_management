@@ -4,7 +4,7 @@ import { getFirestore, type Firestore } from 'firebase/firestore';
 
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDzCkfpVumte994Yv9GpalDAp9eXeT7SdM',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDzCkfpVumtc994Yv9GpalDAp9eXeT7SdM',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'nopphonapp-d0c5b.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'nopphonapp-d0c5b',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'nopphonapp-d0c5b.firebasestorage.app',

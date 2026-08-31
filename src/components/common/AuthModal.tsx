@@ -71,15 +71,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       console.error('Auth error:', err);
       const error = err as { code?: string; message?: string };
       if (error.code === 'auth/email-already-in-use') {
-        setErrorMessage('อีเมลนี้ถูกใช้งานแล้ว กรุณาเข้าสู่ระบบแทน');
-      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        setErrorMessage('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+        setErrorMessage('อีเมลนี้ถูกใช้งานแล้ว กรุณากดเข้าสู่ระบบแทน');
+      } else if (
+        error.code === 'auth/wrong-password' ||
+        error.code === 'auth/user-not-found' ||
+        error.code === 'auth/invalid-credential'
+      ) {
+        setErrorMessage('อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง');
       } else if (error.code === 'auth/weak-password') {
-        setErrorMessage('รหัสผ่านคาดเดาง่ายเกินไป (ต้องมีอย่างน้อย 8 ตัวอักษร)');
+        setErrorMessage('รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร');
       } else if (error.code === 'auth/too-many-requests') {
-        setErrorMessage('มีการพยายามเข้าใช้งานมากเกินไป ระบบระงับชั่วคราวเพื่อความปลอดภัย');
+        setErrorMessage('พยายามเข้าสู่ระบบผิดพลาดบ่อยเกินไป ระบบระงับชั่วคราวเพื่อความปลอดภัย กรุณารอสักครู่');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setErrorMessage('ยังไม่ได้เปิดใช้งานระบบ Email/Password ใน Firebase Console (Authentication > Sign-in method)');
+      } else if (error.code === 'auth/network-request-failed') {
+        setErrorMessage('การเชื่อมต่ออินเทอร์เน็ตขัดข้อง กรุณาตรวจสอบสัญญาณเน็ต');
+      } else if (error.code === 'auth/api-key-not-valid' || error.code === 'auth/invalid-api-key') {
+        setErrorMessage('Firebase API Key ไม่ถูกต้อง กรุณาตรวจสอบการตั้งค่าโปรเจกต์');
       } else {
-        setErrorMessage('เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์ กรุณาลองใหม่อีกครั้ง');
+        setErrorMessage(error.message || 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์ กรุณาลองใหม่อีกครั้ง');
       }
     }
   };
@@ -94,12 +104,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       const error = err as { code?: string; message?: string };
       if (error.code === 'auth/popup-closed-by-user') {
         setErrorMessage('หน้าต่างเข้าสู่ระบบถูกปิดก่อนเสร็จสิ้น');
+      } else if (error.code === 'auth/popup-blocked') {
+        setErrorMessage('เบราว์เซอร์บล็อกหน้าต่าง Pop-up กรุณากดยินยอมเปิด Pop-up เพื่อเข้าสู่ระบบ');
       } else if (error.code === 'auth/unauthorized-domain') {
-        setErrorMessage('โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Console (กรุณาเพิ่ม Authorized Domain)');
+        setErrorMessage('โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Console (Authentication > Settings > Authorized domains)');
       } else if (error.code === 'auth/operation-not-allowed') {
-        setErrorMessage('ยังไม่ได้เปิดใช้งาน Google Sign-in ใน Firebase Console');
+        setErrorMessage('ยังไม่ได้เปิดใช้งาน Google Sign-in ใน Firebase Console (Authentication > Sign-in method)');
+      } else if (error.code === 'auth/network-request-failed') {
+        setErrorMessage('การเชื่อมต่ออินเทอร์เน็ตขัดข้อง กรุณาตรวจสอบสัญญาณเน็ต');
       } else {
-        setErrorMessage('เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google');
+        setErrorMessage(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google');
       }
     }
   };
