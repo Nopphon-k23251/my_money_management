@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDzCkfpVumte994Yv9GpalDAp9eXeT7SdM',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'nopphonapp-d0c5b.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'nopphonapp-d0c5b',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'nopphonapp-d0c5b.firebasestorage.app',
@@ -12,7 +12,7 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-DHQLF38KLW',
 };
 
-export const isFirebaseConfigured = true;
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey);
 
 const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth: Auth = getAuth(app);
