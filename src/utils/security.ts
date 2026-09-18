@@ -1,17 +1,26 @@
 /**
- * Decodes and unescapes any HTML entities back to their normal readable characters
+ * Decodes and unescapes any HTML entities back to their normal readable characters.
+ * Runs in a loop to handle nested encodings (e.g. &amp;amp;amp; -> &)
  */
 export function unescapeHtml(input: string | undefined | null): string {
   if (!input) return '';
-  return String(input)
-    .replace(/&amp;/g, '&')
-    .replace(/&#x2F;/gi, '/')
-    .replace(/&#47;/g, '/')
-    .replace(/&#x27;/gi, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
+  let str = String(input);
+  let prev = '';
+  let iterations = 0;
+  while (str !== prev && iterations < 10) {
+    prev = str;
+    str = str
+      .replace(/&amp;/gi, '&')
+      .replace(/&#x2F;/gi, '/')
+      .replace(/&#47;/g, '/')
+      .replace(/&#x27;/gi, "'")
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/gi, '"')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>');
+    iterations++;
+  }
+  return str;
 }
 
 /**

@@ -20,8 +20,8 @@ describe('Security & Sanitization Utils', () => {
     expect(clean).toBe('อาหาร & เครื่องดื่ม / Food & Dining');
   });
 
-  it('should automatically decode and unescape legacy HTML entities', () => {
-    const legacy = 'อาหาร &amp; เครื่องดื่ม (Food &amp; Dining) &#x2F; ขนม';
+  it('should automatically decode and unescape legacy nested HTML entities', () => {
+    const legacy = 'อาหาร &amp;amp;amp;amp; เครื่องดื่ม (Food &amp;amp;amp; Dining) &#x2F; ขนม';
     expect(unescapeHtml(legacy)).toBe('อาหาร & เครื่องดื่ม (Food & Dining) / ขนม');
     expect(sanitizeInput(legacy)).toBe('อาหาร & เครื่องดื่ม (Food & Dining) / ขนม');
   });
