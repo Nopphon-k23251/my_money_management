@@ -1,15 +1,34 @@
 /**
- * Sanitizes input strings against XSS attacks by escaping HTML characters
+ * Decodes and unescapes any HTML entities back to their normal readable characters
+ */
+export function unescapeHtml(input: string | undefined | null): string {
+  if (!input) return '';
+  return String(input)
+    .replace(/&amp;/g, '&')
+    .replace(/&#x2F;/gi, '/')
+    .replace(/&#47;/g, '/')
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+/**
+ * Sanitizes input strings against malicious script injection and control characters,
+ * while preserving legitimate characters like '&', '/', quotes, and punctuation for safe React rendering.
  */
 export function sanitizeInput(input: string | undefined | null): string {
   if (!input) return '';
-  return String(input)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
+  let str = unescapeHtml(String(input).trim());
+  // Remove null and dangerous non-printable control characters
+  str = str.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F]/g, '');
+  // Strip dangerous script tags and javascript: pseudo-protocols
+  str = str.replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, '');
+  str = str.replace(/<\s*script[^>]*>/gi, '');
+  str = str.replace(/<\s*\/\s*script\s*>/gi, '');
+  str = str.replace(/javascript\s*:/gi, '');
+  return str;
 }
 
 /**

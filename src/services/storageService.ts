@@ -1,6 +1,7 @@
 import type { Asset, Transaction, Budget } from '../types/finance';
 import { db } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { unescapeHtml } from '../utils/security';
 
 const BASE_ASSETS_KEY = 'mm_assets_v1';
 const BASE_TRANSACTIONS_KEY = 'mm_transactions_v1';
@@ -15,6 +16,31 @@ export interface UserFinanceData {
   transactions: Transaction[];
   budgets: Budget[];
   updatedAt: string;
+}
+
+function normalizeAsset(asset: Asset): Asset {
+  return {
+    ...asset,
+    name: unescapeHtml(asset.name),
+    bankName: asset.bankName ? unescapeHtml(asset.bankName) : undefined,
+    accountNumber: asset.accountNumber ? unescapeHtml(asset.accountNumber) : undefined,
+    notes: asset.notes ? unescapeHtml(asset.notes) : undefined,
+  };
+}
+
+function normalizeTransaction(tx: Transaction): Transaction {
+  return {
+    ...tx,
+    category: unescapeHtml(tx.category),
+    description: tx.description ? unescapeHtml(tx.description) : undefined,
+  };
+}
+
+function normalizeBudget(budget: Budget): Budget {
+  return {
+    ...budget,
+    category: unescapeHtml(budget.category),
+  };
 }
 
 export const storageService = {
@@ -32,7 +58,9 @@ export const storageService = {
     try {
       const key = this.getStorageKeys(userId).assets;
       const data = localStorage.getItem(key) || localStorage.getItem(BASE_ASSETS_KEY);
-      return data ? JSON.parse(data) : INITIAL_ASSETS;
+      if (!data) return INITIAL_ASSETS;
+      const parsed: Asset[] = JSON.parse(data);
+      return parsed.map(normalizeAsset);
     } catch {
       return INITIAL_ASSETS;
     }
@@ -41,8 +69,9 @@ export const storageService = {
   saveAssets(assets: Asset[], userId?: string): void {
     try {
       const key = this.getStorageKeys(userId).assets;
-      localStorage.setItem(key, JSON.stringify(assets));
-      localStorage.setItem(BASE_ASSETS_KEY, JSON.stringify(assets));
+      const clean = assets.map(normalizeAsset);
+      localStorage.setItem(key, JSON.stringify(clean));
+      localStorage.setItem(BASE_ASSETS_KEY, JSON.stringify(clean));
     } catch (e) {
       console.error('Failed to save assets:', e);
     }
@@ -52,7 +81,9 @@ export const storageService = {
     try {
       const key = this.getStorageKeys(userId).transactions;
       const data = localStorage.getItem(key) || localStorage.getItem(BASE_TRANSACTIONS_KEY);
-      return data ? JSON.parse(data) : INITIAL_TRANSACTIONS;
+      if (!data) return INITIAL_TRANSACTIONS;
+      const parsed: Transaction[] = JSON.parse(data);
+      return parsed.map(normalizeTransaction);
     } catch {
       return INITIAL_TRANSACTIONS;
     }
@@ -61,8 +92,9 @@ export const storageService = {
   saveTransactions(transactions: Transaction[], userId?: string): void {
     try {
       const key = this.getStorageKeys(userId).transactions;
-      localStorage.setItem(key, JSON.stringify(transactions));
-      localStorage.setItem(BASE_TRANSACTIONS_KEY, JSON.stringify(transactions));
+      const clean = transactions.map(normalizeTransaction);
+      localStorage.setItem(key, JSON.stringify(clean));
+      localStorage.setItem(BASE_TRANSACTIONS_KEY, JSON.stringify(clean));
     } catch (e) {
       console.error('Failed to save transactions:', e);
     }
@@ -72,7 +104,9 @@ export const storageService = {
     try {
       const key = this.getStorageKeys(userId).budgets;
       const data = localStorage.getItem(key) || localStorage.getItem(BASE_BUDGETS_KEY);
-      return data ? JSON.parse(data) : INITIAL_BUDGETS;
+      if (!data) return INITIAL_BUDGETS;
+      const parsed: Budget[] = JSON.parse(data);
+      return parsed.map(normalizeBudget);
     } catch {
       return INITIAL_BUDGETS;
     }
@@ -81,8 +115,9 @@ export const storageService = {
   saveBudgets(budgets: Budget[], userId?: string): void {
     try {
       const key = this.getStorageKeys(userId).budgets;
-      localStorage.setItem(key, JSON.stringify(budgets));
-      localStorage.setItem(BASE_BUDGETS_KEY, JSON.stringify(budgets));
+      const clean = budgets.map(normalizeBudget);
+      localStorage.setItem(key, JSON.stringify(clean));
+      localStorage.setItem(BASE_BUDGETS_KEY, JSON.stringify(clean));
     } catch (e) {
       console.error('Failed to save budgets:', e);
     }
@@ -95,12 +130,12 @@ export const storageService = {
       return false;
     }
     try {
-      // Deep clone and remove all `undefined` values to prevent Firestore unsupported field value errors
+      // Deep clone, unescape entities, and remove all `undefined` values to prevent Firestore unsupported field value errors
       const cleanData = JSON.parse(
         JSON.stringify({
-          assets: data.assets || [],
-          transactions: data.transactions || [],
-          budgets: data.budgets || [],
+          assets: (data.assets || []).map(normalizeAsset),
+          transactions: (data.transactions || []).map(normalizeTransaction),
+          budgets: (data.budgets || []).map(normalizeBudget),
           updatedAt: new Date().toISOString(),
         })
       );
@@ -123,9 +158,15 @@ export const storageService = {
       const userDocRef = doc(db, 'users_finance', userId);
       const snapshot = await getDoc(userDocRef);
       if (snapshot.exists()) {
-        const data = snapshot.data() as UserFinanceData;
-        console.info('[CloudSync] Loaded existing cloud document for user:', userId, 'Assets:', data.assets?.length, 'Tx:', data.transactions?.length);
-        return data;
+        const rawData = snapshot.data() as UserFinanceData;
+        const cleanData: UserFinanceData = {
+          assets: (rawData.assets || []).map(normalizeAsset),
+          transactions: (rawData.transactions || []).map(normalizeTransaction),
+          budgets: (rawData.budgets || []).map(normalizeBudget),
+          updatedAt: rawData.updatedAt || new Date().toISOString(),
+        };
+        console.info('[CloudSync] Loaded existing cloud document for user:', userId, 'Assets:', cleanData.assets.length, 'Tx:', cleanData.transactions.length);
+        return cleanData;
       }
       console.info('[CloudSync] No cloud document found for user yet:', userId);
       return null;
@@ -145,9 +186,15 @@ export const storageService = {
       userDocRef,
       (snapshot) => {
         if (snapshot.exists()) {
-          const cloudData = snapshot.data() as UserFinanceData;
-          console.info('[CloudSync] Realtime cloud update received for user:', userId, 'Tx:', cloudData.transactions?.length);
-          onUpdate(cloudData);
+          const rawData = snapshot.data() as UserFinanceData;
+          const cleanData: UserFinanceData = {
+            assets: (rawData.assets || []).map(normalizeAsset),
+            transactions: (rawData.transactions || []).map(normalizeTransaction),
+            budgets: (rawData.budgets || []).map(normalizeBudget),
+            updatedAt: rawData.updatedAt || new Date().toISOString(),
+          };
+          console.info('[CloudSync] Realtime cloud update received for user:', userId, 'Tx:', cleanData.transactions.length);
+          onUpdate(cleanData);
         }
       },
       (error) => {

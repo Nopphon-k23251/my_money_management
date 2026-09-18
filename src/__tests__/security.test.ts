@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   sanitizeInput,
+  unescapeHtml,
   sanitizeCsvField,
   validateAmount,
   validateDate,
@@ -12,11 +13,17 @@ import {
 } from '../utils/security';
 
 describe('Security & Sanitization Utils', () => {
-  it('should sanitize dangerous HTML tags and XSS payloads', () => {
-    const dirty = '<script>alert("XSS")</script>';
+  it('should sanitize dangerous HTML script tags while keeping normal characters like & and / clean', () => {
+    const dirty = '<script>alert("XSS")</script>อาหาร & เครื่องดื่ม / Food & Dining';
     const clean = sanitizeInput(dirty);
     expect(clean).not.toContain('<script>');
-    expect(clean).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;&#x2F;script&gt;');
+    expect(clean).toBe('อาหาร & เครื่องดื่ม / Food & Dining');
+  });
+
+  it('should automatically decode and unescape legacy HTML entities', () => {
+    const legacy = 'อาหาร &amp; เครื่องดื่ม (Food &amp; Dining) &#x2F; ขนม';
+    expect(unescapeHtml(legacy)).toBe('อาหาร & เครื่องดื่ม (Food & Dining) / ขนม');
+    expect(sanitizeInput(legacy)).toBe('อาหาร & เครื่องดื่ม (Food & Dining) / ขนม');
   });
 
   it('should sanitize CSV cells to prevent Formula Injection (CWE-1236)', () => {
